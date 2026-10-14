@@ -57,7 +57,15 @@ export const net = {
       return;
     }
     return new Promise((resolve) => {
-      s.emit(event, payload, (response) => {
+      s.timeout(12000).emit(event, payload, (timeoutError, response) => {
+        if (timeoutError) {
+          resolve({
+            ok: false,
+            code: 'NETWORK',
+            error: 'The room server did not respond. Please try again.',
+          });
+          return;
+        }
         resolve(response || { ok: false, code: 'INTERNAL', error: 'No response' });
       });
     });
