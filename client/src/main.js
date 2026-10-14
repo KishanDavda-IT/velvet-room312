@@ -175,6 +175,15 @@ async function enterRoom({ roomId, name, hostKey }) {
     return joinRes;
   }
 
+  if (joinRes.state?.isHost && hostKey) {
+    try {
+      sessionStorage.setItem(`velvet:hostKey:${roomId}`, hostKey);
+    } catch {
+      // Ignore
+    }
+    window.history.replaceState({}, '', `/r/${roomId}?host=1`);
+  }
+
   // Load initial state into store
   store.loadRoomState(joinRes.state);
 
@@ -694,8 +703,17 @@ async function handleRoute(route) {
 
     let savedHostKey = null;
     let savedName = null;
+    const hostKeyStorageKey = `velvet:hostKey:${roomId}`;
+    const isHostTab = new URLSearchParams(window.location.search).get('host') === '1';
     try {
-      savedHostKey = localStorage.getItem(`velvet:hostKey:${roomId}`);
+      // Host identity is restored only from the explicit host route, never from a shared invite link.
+      if (isHostTab) {
+        savedHostKey = sessionStorage.getItem(hostKeyStorageKey) || localStorage.getItem(hostKeyStorageKey);
+        if (savedHostKey) {
+          sessionStorage.setItem(hostKeyStorageKey, savedHostKey);
+          localStorage.removeItem(hostKeyStorageKey);
+        }
+      }
       savedName = localStorage.getItem('velvet:name');
     } catch {
       // Ignore
