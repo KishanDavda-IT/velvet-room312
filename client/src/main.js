@@ -132,7 +132,11 @@ async function enterRoom({ roomId, name, hostKey }) {
   seatsBuilder.setInteractive(true);
 
   const socket = net.connect();
-  const joinRes = await net.emit('room:join', { roomId, name, hostKey });
+  let joinRes = await net.emit('room:join', { roomId, name, hostKey });
+  if (!joinRes?.ok && ['INTERNAL', 'NETWORK'].includes(joinRes?.code)) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    joinRes = await net.emit('room:join', { roomId, name, hostKey });
+  }
 
   if (!joinRes || !joinRes.ok) {
     const code = joinRes?.code || 'INTERNAL';
@@ -158,6 +162,16 @@ async function enterRoom({ roomId, name, hostKey }) {
       });
       return joinRes;
     }
+
+    const retryRoomInfo = await getRoomInfo(roomId).catch(() => ({ count: 0, max: 8 }));
+    activeOverlay = renderJoinGate({
+      container: appEl,
+      roomInfo: retryRoomInfo,
+      initialError: joinRes?.error || 'Could not connect to the room. Please try again.',
+      onJoin(retryName) {
+        return enterRoom({ roomId, name: retryName, hostKey });
+      },
+    });
     return joinRes;
   }
 
