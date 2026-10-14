@@ -4,6 +4,12 @@
   "functions": {
     "api/[...path].js": {
       "maxDuration": 300
+    },
+    "api/rooms/[roomId].js": {
+      "maxDuration": 300
+    },
+    "api/socket.io.js": {
+      "maxDuration": 300
     }
   },
   "rewrites": [
