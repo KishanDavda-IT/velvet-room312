@@ -26,7 +26,7 @@ export function renderHud({
   logoEl.className = 'glass hud-logo hud-interactive';
   logoEl.textContent = 'Velvet Room';
 
-  const inviteUrl = `${window.location.origin}/r/${store.roomId}`;
+  const inviteUrl = `${window.location.origin}/r/${store.roomId}?join=1`;
   const inviteBtn = document.createElement('button');
   inviteBtn.type = 'button';
   inviteBtn.className = 'glass hud-invite-btn hud-interactive';
