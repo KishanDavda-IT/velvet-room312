@@ -85,12 +85,12 @@ export function renderLanding({ container, onEnterRoomAsHost, onNavigateToRoom }
     try {
       const { roomId, hostKey } = await createRoom();
       try {
-        localStorage.setItem(`velvet:hostKey:${roomId}`, hostKey);
+        sessionStorage.setItem(`velvet:hostKey:${roomId}`, hostKey);
         localStorage.setItem('velvet:name', name);
       } catch {
         // Ignore storage errors
       }
-      window.history.pushState({}, '', `/r/${roomId}`);
+      window.history.pushState({}, '', `/r/${roomId}?host=1`);
       onEnterRoomAsHost({ roomId, name, hostKey });
     } catch (err) {
       createBtn.disabled = false;
