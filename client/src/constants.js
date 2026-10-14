@@ -1,5 +1,5 @@
 export const ROOM   = { W: 16, H: 7, D: 20 };            // x: -8..8, y: 0..7, z: -10..10
-export const SCREEN = { W: 9.6, H: 5.4, CENTER: [0, 3.6, -9.85] };  // 16:9
+export const SCREEN = { W: 9.6, H: 5.4, CENTER: [0, 3.6, -9.82] };  // 16:9
 export const SEAT_COLS_X = [-3.6, -1.2, 1.2, 3.6];
 export const SEAT_ROWS = [ { z: 0, y: 0 }, { z: 3, y: 0.5 } ];       // row 1 sits on a 0.5 m riser
 export const SEATS = SEAT_ROWS.flatMap((r, ri) =>
