@@ -15,6 +15,7 @@ import { buildReactions } from './scene/reactions.js';
 import { createCameraRig } from './scene/cameraRig.js';
 import { HostStreamer } from './rtc/hostStreamer.js';
 import { ViewerReceiver } from './rtc/viewerReceiver.js';
+import { CinemaAudio } from './audio/cinemaAudio.js';
 import { renderLanding } from './ui/landing.js';
 import { renderJoinGate, renderStatusScreen, unlockAudioGesture } from './ui/joinGate.js';
 import { renderHud } from './ui/hud.js';
@@ -287,6 +288,7 @@ async function enterRoom({ roomId, name, hostKey }) {
   screenBuilder.setStatus(store.status);
 
   let currentVolume = getSavedVolume();
+  const cinemaAudio = store.isHost ? new CinemaAudio({ enabled: true }) : null;
   let hostStreamer = null;
   let viewerReceiver = null;
 
@@ -294,6 +296,7 @@ async function enterRoom({ roomId, name, hostKey }) {
     hostStreamer = new HostStreamer({
       onLocalVideoChange(videoEl) {
         screenBuilder.setSource(videoEl);
+        cinemaAudio?.setSource(videoEl && !videoEl.muted ? videoEl : null);
       },
       getVolume: () => currentVolume,
     });
@@ -314,7 +317,7 @@ async function enterRoom({ roomId, name, hostKey }) {
     initialFirstPerson: cameraRig.isFirstPerson(),
     initialStreamActive: store.streaming.active,
     initialScreenFocused: screenBuilder.isScreenFocused(),
-    initialSpatialAudioEnabled: viewerReceiver?.spatialAudioEnabled || false,
+    initialSpatialAudioEnabled: viewerReceiver ? viewerReceiver.spatialAudioEnabled : (cinemaAudio?.isEnabled() ?? true),
     initialSpatialAudioMotion: viewerReceiver?.spatialAudioMotion ?? 0.72,
     isHost: store.isHost,
     onToggleLights() {
@@ -338,7 +341,7 @@ async function enterRoom({ roomId, name, hostKey }) {
       return active;
     },
     onSetSpatialAudioEnabled(enabled) {
-      return viewerReceiver?.setSpatialAudioEnabled(enabled) ?? false;
+      return viewerReceiver ? viewerReceiver.setSpatialAudioEnabled(enabled) : cinemaAudio.setEnabled(enabled);
     },
     onSetSpatialAudioMotion(motion) {
       viewerReceiver?.setSpatialAudioMotion(motion);
@@ -708,6 +711,7 @@ async function enterRoom({ roomId, name, hostKey }) {
     offStoreStreaming();
     hostStreamer?.stop(undefined, { emitSocket: false });
     viewerReceiver?.dispose();
+    cinemaAudio?.dispose();
     hostControls?.destroy();
     chat.destroy();
     hud.destroy();
