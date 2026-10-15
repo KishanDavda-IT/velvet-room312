@@ -146,6 +146,11 @@ export class ViewerReceiver {
           this.recoveryTimer = null;
         }
         this.clearWatchdog();
+        if (store.streaming.active && this._video?.readyState >= 2) {
+          this.hasTrack = true;
+          store.setStatus(STATUS_TEXT.LIVE);
+          this.onRemoteVideoChange(this._video);
+        }
       } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
         store.setStatus(STATUS_TEXT.RECONNECTING);
         this.scheduleResync(pc.connectionState === 'failed' ? 0 : 1800);
