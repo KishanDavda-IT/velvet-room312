@@ -236,6 +236,7 @@ async function enterRoom({ roomId, name, hostKey }) {
       for (const peer of store.peers.values()) {
         avatarsBuilder.upsertAvatar(peer, store.selfId);
       }
+      playerController?.stop();
       if (cameraRig.isFirstPerson()) avatarsBuilder.setAvatarVisible(store.selfId, false);
       cameraRig.setFollowTarget(() => avatarsBuilder.getAvatarPosition(store.selfId));
       playerController?.resetFacing(store.peers.get(store.selfId)?.position?.yaw || 0);
@@ -366,6 +367,24 @@ async function enterRoom({ roomId, name, hostKey }) {
 
   // Socket event handlers
   const unsubSockets = [];
+  let hostDepartureTimer = null;
+  let hostReturnConfirmationTimer = null;
+
+  function clearHostRecoveryTimers() {
+    if (hostDepartureTimer) clearTimeout(hostDepartureTimer);
+    if (hostReturnConfirmationTimer) clearTimeout(hostReturnConfirmationTimer);
+    hostDepartureTimer = null;
+    hostReturnConfirmationTimer = null;
+  }
+
+  function finalizeHostDeparture() {
+    hostDepartureTimer = null;
+    hostReturnConfirmationTimer = null;
+    store.hostPresent = false;
+    store.setStreaming({ active: false, kind: null });
+    viewerReceiver?.reset();
+    store.setStatus(STATUS_TEXT.HOST_LEFT);
+  }
 
   unsubSockets.push(
     net.on('peer:joined', ({ peer }) => {
@@ -441,6 +460,7 @@ async function enterRoom({ roomId, name, hostKey }) {
 
   unsubSockets.push(
     net.on('stream:started', ({ kind }) => {
+      clearHostRecoveryTimers();
       store.hostPresent = true;
       store.setStreaming({ active: true, kind });
       if (store.isHost) {
@@ -454,6 +474,10 @@ async function enterRoom({ roomId, name, hostKey }) {
 
   unsubSockets.push(
     net.on('stream:stopped', () => {
+      // Host disconnect emits stream:stopped before it can rejoin. Keep the
+      // last frame during the short reconnect grace period.
+      if (hostDepartureTimer && !store.isHost) return;
+      clearHostRecoveryTimers();
       store.setStreaming({ active: false, kind: null });
       if (viewerReceiver) {
         viewerReceiver.reset();
@@ -474,24 +498,44 @@ async function enterRoom({ roomId, name, hostKey }) {
 
   unsubSockets.push(
     net.on('host:left', () => {
-      store.hostPresent = false;
-      store.setStreaming({ active: false, kind: null });
-      if (viewerReceiver) {
-        viewerReceiver.reset();
+      if (hostDepartureTimer) clearTimeout(hostDepartureTimer);
+      if (hostReturnConfirmationTimer) {
+        clearTimeout(hostReturnConfirmationTimer);
+        hostReturnConfirmationTimer = null;
       }
-      store.setStatus(STATUS_TEXT.HOST_LEFT);
+      store.hostPresent = false;
+      store.setStatus(STATUS_TEXT.RECONNECTING);
+      hostDepartureTimer = setTimeout(finalizeHostDeparture, 15000);
     })
   );
 
   unsubSockets.push(
     net.on('host:returned', ({ id }) => {
+      if (hostDepartureTimer) {
+        clearTimeout(hostDepartureTimer);
+        hostDepartureTimer = null;
+      }
+      if (hostReturnConfirmationTimer) {
+        clearTimeout(hostReturnConfirmationTimer);
+        hostReturnConfirmationTimer = null;
+      }
       store.hostPresent = true;
       const hostPeer = store.peers.get(id);
       if (hostPeer) {
         hostPeer.isHost = true;
         avatarsBuilder.upsertAvatar(hostPeer, store.selfId);
       }
-      if (!store.streaming.active) {
+      if (store.streaming.active) {
+        store.setStatus(STATUS_TEXT.CONNECTING);
+        viewerReceiver?.startWatchdog();
+        hostReturnConfirmationTimer = setTimeout(() => {
+          hostReturnConfirmationTimer = null;
+          if (store.isHost || !store.hostPresent || !store.streaming.active) return;
+          store.setStreaming({ active: false, kind: null });
+          viewerReceiver?.reset();
+          store.setStatus(STATUS_TEXT.WAITING);
+        }, 15000);
+      } else {
         store.setStatus(STATUS_TEXT.WAITING);
       }
     })
@@ -628,6 +672,7 @@ async function enterRoom({ roomId, name, hostKey }) {
   window.addEventListener('keydown', onKeyDown);
 
   activeRoomCleanup = () => {
+    clearHostRecoveryTimers();
     window.removeEventListener('keydown', onKeyDown);
     playerController?.dispose();
     playerController = null;

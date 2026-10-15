@@ -413,7 +413,7 @@ export class HostStreamer {
           const params = sender.getParameters();
           params.encodings = params.encodings?.length ? params.encodings : [{}];
           params.encodings[0].maxBitrate = maxBitrate;
-          params.degradationPreference = 'maintain-framerate';
+          params.degradationPreference = 'maintain-resolution';
           await sender.setParameters(params);
         }
       }

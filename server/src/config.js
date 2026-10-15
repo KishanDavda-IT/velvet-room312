@@ -60,7 +60,7 @@ export const CONFIG = Object.freeze({
   CLOUDFLARE_TURN_KEY_SECRET: (process.env.CLOUDFLARE_TURN_KEY_SECRET || '').trim(),
   MAX_ROOM_SIZE: clamp(Math.floor(parseNumber(process.env.MAX_ROOM_SIZE, 8)), 2, 8),
   ROOM_EMPTY_TTL_MS: Math.max(1000, parseNumber(process.env.ROOM_EMPTY_TTL_MS, 60000)),
-  VIDEO_MAX_BITRATE: Math.max(100000, parseNumber(process.env.VIDEO_MAX_BITRATE, 1500000)),
+  VIDEO_MAX_BITRATE: Math.max(100000, parseNumber(process.env.VIDEO_MAX_BITRATE, 4000000)),
   LOG_LEVEL: (process.env.LOG_LEVEL || 'info').trim(),
 });
 

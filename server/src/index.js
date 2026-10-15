@@ -87,6 +87,10 @@ function movieFileFromMetadata(data) {
 
 export function createApp() {
   const app = express();
+  if (process.env.VERCEL === '1') {
+    // Vercel overwrites X-Forwarded-For with the public client IP.
+    app.set('trust proxy', true);
+  }
   app.disable('x-powered-by');
   app.use(express.json());
 

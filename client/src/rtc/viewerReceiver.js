@@ -13,6 +13,7 @@ export class ViewerReceiver {
     this.pendingIce = [];
     this.watchdogTimer = null;
     this.watchdogPhase = 0;
+    this.recoveryTimer = null;
     this.hasTrack = false;
     this._liveFrameToken = 0;
     this.tapOverlayEl = null;
@@ -36,6 +37,17 @@ export class ViewerReceiver {
     if (this._video) {
       this._video.volume = Math.min(Math.max(vol, 0), 1);
     }
+  }
+
+  scheduleResync(delay = 1800) {
+    if (this.recoveryTimer) return;
+    this.recoveryTimer = setTimeout(() => {
+      this.recoveryTimer = null;
+      if (!this.pc || this.pc.connectionState === 'connected' || !store.streaming.active) return;
+      store.setStatus(STATUS_TEXT.RECONNECTING);
+      net.emit('stream:resync', {});
+      this.startWatchdog();
+    }, delay);
   }
 
   startWatchdog() {
@@ -126,7 +138,25 @@ export class ViewerReceiver {
     const pc = new RTCPeerConnection({ iceServers });
     this.pc = pc;
 
+    pc.onconnectionstatechange = () => {
+      if (this.pc !== pc) return;
+      if (pc.connectionState === 'connected') {
+        if (this.recoveryTimer) {
+          clearTimeout(this.recoveryTimer);
+          this.recoveryTimer = null;
+        }
+        this.clearWatchdog();
+      } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+        store.setStatus(STATUS_TEXT.RECONNECTING);
+        this.scheduleResync(pc.connectionState === 'failed' ? 0 : 1800);
+      }
+    };
+
     pc.ontrack = (e) => {
+      if (this.recoveryTimer) {
+        clearTimeout(this.recoveryTimer);
+        this.recoveryTimer = null;
+      }
       this.hasTrack = true;
       this.clearWatchdog();
 
@@ -194,6 +224,10 @@ export class ViewerReceiver {
   reset() {
     this._liveFrameToken += 1;
     this.clearWatchdog();
+    if (this.recoveryTimer) {
+      clearTimeout(this.recoveryTimer);
+      this.recoveryTimer = null;
+    }
     this.hideTapToPlayOverlay();
     this.hasTrack = false;
     this.pendingIce = [];

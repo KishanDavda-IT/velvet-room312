@@ -31,12 +31,22 @@ export function createPlayerController({ getPosition, getViewYaw, onMove }) {
     keys.add(key);
   }
 
+  function stopMovement() {
+    keys.clear();
+    if (!wasMoving) return;
+    const current = getPosition();
+    if (current) onMove({ ...current, moving: false }, true);
+    wasMoving = false;
+    lastSendAt = performance.now();
+  }
+
   function onKeyUp(event) {
     keys.delete(event.key.toLowerCase());
+    if (keys.size === 0) stopMovement();
   }
 
   function clearKeys() {
-    keys.clear();
+    stopMovement();
   }
 
   function onVisibilityChange() {
@@ -92,6 +102,7 @@ export function createPlayerController({ getPosition, getViewYaw, onMove }) {
 
   return {
     update,
+    stop: stopMovement,
     resetFacing(yaw = 0) {
       facing = Number.isFinite(yaw) ? yaw : 0;
     },

@@ -146,10 +146,13 @@ export function registerSocketHandlers(io) {
       const parsed = playerMoveSchema.safeParse(payload);
       if (!parsed.success) return;
       const now = Date.now();
-      if (now - socket.data.lastPlayerMoveAt < 65) return;
-      socket.data.lastPlayerMoveAt = now;
       try {
         const room = requireSocketMembership(socket);
+        const member = room.members.get(socket.id);
+        const isStopTransition = !parsed.data.moving && member?.position?.moving;
+        // Preserve throttling for normal updates, but always allow the final stop.
+        if (!isStopTransition && now - socket.data.lastPlayerMoveAt < 65) return;
+        socket.data.lastPlayerMoveAt = now;
         const position = moveMember(room, socket.id, parsed.data);
         socket.to(room.id).emit('player:moved', { id: socket.id, position });
       } catch {

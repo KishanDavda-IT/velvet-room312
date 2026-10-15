@@ -109,18 +109,32 @@ export function buildAvatars(scene) {
     group.position.set(position.x, position.y, position.z);
     group.rotation.y = position.yaw;
 
+    let identityHash = 0;
+    for (const char of String(peer.id || peer.name || 'player')) {
+      identityHash = (identityHash * 31 + char.charCodeAt(0)) >>> 0;
+    }
+    const skinTones = [0xf3c78d, 0xd9a06d, 0xb9774e, 0x8d573c, 0xf4d2ad, 0xc89469];
+    const hairTones = [0x211c21, 0x553324, 0x8d532d, 0xd4ae61, 0x5a261f, 0x3d485d, 0x222634];
     const shirtMat = new THREE.MeshStandardMaterial({
       color: peer.color || '#e8a33d',
-      roughness: 0.84,
+      roughness: 0.78,
     });
     const skinMat = new THREE.MeshStandardMaterial({
-      color: 0xf1c27d,
-      roughness: 0.88,
+      color: skinTones[identityHash % skinTones.length],
+      roughness: 0.84,
     });
     const pantsColor = new THREE.Color(peer.color || '#e8a33d').multiplyScalar(0.48);
-    const pantsMat = new THREE.MeshStandardMaterial({ color: pantsColor, roughness: 0.9 });
+    const pantsMat = new THREE.MeshStandardMaterial({ color: pantsColor, roughness: 0.86 });
     const faceMat = new THREE.MeshStandardMaterial({ color: 0x29202a, roughness: 0.8 });
-    const materials = [shirtMat, skinMat, pantsMat, faceMat];
+    const eyeWhiteMat = new THREE.MeshStandardMaterial({ color: 0xfff3dc, roughness: 0.72 });
+    const hairMat = new THREE.MeshStandardMaterial({
+      color: hairTones[(identityHash >>> 4) % hairTones.length],
+      roughness: 0.92,
+    });
+    const detailMat = new THREE.MeshStandardMaterial({ color: 0xd2a452, metalness: 0.48, roughness: 0.42 });
+    const shoeMat = new THREE.MeshStandardMaterial({ color: 0x27232a, roughness: 0.72 });
+    const soleMat = new THREE.MeshStandardMaterial({ color: 0xe9dfcf, roughness: 0.8 });
+    const materials = [shirtMat, skinMat, pantsMat, faceMat, eyeWhiteMat, hairMat, detailMat, shoeMat, soleMat];
     const geometries = [];
 
     function mesh(geometry, material, parent, x, y, z) {
@@ -136,24 +150,62 @@ export function buildAvatars(scene) {
     const pose = new THREE.Group();
     group.add(pose);
 
-    // Classic blocky R6 proportions: squared head, torso and jointed limbs.
+    // Classic blocky R6 proportions with layered hair, facial features and clothing details.
     mesh(new THREE.BoxGeometry(0.82, 0.84, 0.42), shirtMat, pose, 0, 1.2, 0);
     mesh(new THREE.BoxGeometry(0.62, 0.62, 0.62), skinMat, pose, 0, 1.94, 0);
-    mesh(new THREE.BoxGeometry(0.075, 0.085, 0.026), faceMat, pose, -0.135, 1.99, -0.315);
-    mesh(new THREE.BoxGeometry(0.075, 0.085, 0.026), faceMat, pose, 0.135, 1.99, -0.315);
-    mesh(new THREE.BoxGeometry(0.19, 0.025, 0.026), faceMat, pose, 0, 1.81, -0.315);
+    mesh(new THREE.BoxGeometry(0.11, 0.15, 0.08), skinMat, pose, -0.35, 1.92, 0);
+    mesh(new THREE.BoxGeometry(0.11, 0.15, 0.08), skinMat, pose, 0.35, 1.92, 0);
+
+    const hairStyle = (identityHash >>> 8) % 3;
+    mesh(new THREE.BoxGeometry(0.68, 0.18, 0.68), hairMat, pose, 0, 2.29, 0.015);
+    mesh(new THREE.BoxGeometry(0.12, 0.32, 0.56), hairMat, pose, -0.29, 2.12, 0.025);
+    mesh(new THREE.BoxGeometry(0.12, 0.32, 0.56), hairMat, pose, 0.29, 2.12, 0.025);
+    if (hairStyle === 0) {
+      mesh(new THREE.BoxGeometry(0.66, 0.16, 0.18), hairMat, pose, 0, 2.2, -0.27);
+      mesh(new THREE.BoxGeometry(0.28, 0.14, 0.18), hairMat, pose, -0.19, 2.12, -0.29);
+    } else if (hairStyle === 1) {
+      mesh(new THREE.BoxGeometry(0.68, 0.1, 0.18), hairMat, pose, 0, 2.17, -0.28);
+      mesh(new THREE.BoxGeometry(0.32, 0.12, 0.15), detailMat, pose, 0, 2.3, -0.17);
+    } else {
+      mesh(new THREE.BoxGeometry(0.62, 0.14, 0.2), hairMat, pose, 0, 2.16, -0.27);
+      mesh(new THREE.BoxGeometry(0.76, 0.07, 0.28), hairMat, pose, 0, 2.23, -0.34);
+    }
+
+    mesh(new THREE.BoxGeometry(0.105, 0.12, 0.025), eyeWhiteMat, pose, -0.135, 1.99, -0.319);
+    mesh(new THREE.BoxGeometry(0.105, 0.12, 0.025), eyeWhiteMat, pose, 0.135, 1.99, -0.319);
+    mesh(new THREE.BoxGeometry(0.046, 0.07, 0.018), faceMat, pose, -0.125, 1.99, -0.338);
+    mesh(new THREE.BoxGeometry(0.046, 0.07, 0.018), faceMat, pose, 0.145, 1.99, -0.338);
+    mesh(new THREE.BoxGeometry(0.14, 0.025, 0.022), hairMat, pose, -0.135, 2.1, -0.323);
+    mesh(new THREE.BoxGeometry(0.14, 0.025, 0.022), hairMat, pose, 0.135, 2.1, -0.323);
+    mesh(new THREE.BoxGeometry(0.16, 0.025, 0.02), faceMat, pose, 0, 1.82, -0.323);
+
+    // Collar, button placket and a small jacket badge make each blocky shirt read clearly.
+    const leftCollar = mesh(new THREE.BoxGeometry(0.22, 0.11, 0.035), eyeWhiteMat, pose, -0.12, 1.58, -0.232);
+    leftCollar.rotation.z = -0.42;
+    const rightCollar = mesh(new THREE.BoxGeometry(0.22, 0.11, 0.035), eyeWhiteMat, pose, 0.12, 1.58, -0.232);
+    rightCollar.rotation.z = 0.42;
+    mesh(new THREE.BoxGeometry(0.045, 0.33, 0.025), detailMat, pose, 0, 1.27, -0.226);
+    for (const y of [1.36, 1.25, 1.14]) {
+      mesh(new THREE.BoxGeometry(0.035, 0.035, 0.025), eyeWhiteMat, pose, 0, y, -0.241);
+    }
+    mesh(new THREE.BoxGeometry(0.14, 0.13, 0.035), detailMat, pose, -0.27, 1.42, -0.235);
+    mesh(new THREE.BoxGeometry(0.08, 0.07, 0.02), shirtMat, pose, -0.27, 1.42, -0.258);
 
     const leftArm = new THREE.Group();
     leftArm.position.set(-0.49, 1.56, 0);
     pose.add(leftArm);
-    mesh(new THREE.BoxGeometry(0.32, 0.76, 0.35), skinMat, leftArm, 0, -0.38, 0);
-    mesh(new THREE.BoxGeometry(0.32, 0.24, 0.35), skinMat, leftArm, 0, -0.85, 0);
+    mesh(new THREE.BoxGeometry(0.32, 0.48, 0.35), shirtMat, leftArm, 0, -0.24, 0);
+    mesh(new THREE.BoxGeometry(0.32, 0.07, 0.35), detailMat, leftArm, 0, -0.5, 0);
+    mesh(new THREE.BoxGeometry(0.3, 0.24, 0.33), skinMat, leftArm, 0, -0.65, 0);
+    mesh(new THREE.BoxGeometry(0.3, 0.17, 0.33), skinMat, leftArm, 0, -0.84, 0);
 
     const rightArm = new THREE.Group();
     rightArm.position.set(0.49, 1.56, 0);
     pose.add(rightArm);
-    mesh(new THREE.BoxGeometry(0.32, 0.76, 0.35), skinMat, rightArm, 0, -0.38, 0);
-    mesh(new THREE.BoxGeometry(0.32, 0.24, 0.35), skinMat, rightArm, 0, -0.85, 0);
+    mesh(new THREE.BoxGeometry(0.32, 0.48, 0.35), shirtMat, rightArm, 0, -0.24, 0);
+    mesh(new THREE.BoxGeometry(0.32, 0.07, 0.35), detailMat, rightArm, 0, -0.5, 0);
+    mesh(new THREE.BoxGeometry(0.3, 0.24, 0.33), skinMat, rightArm, 0, -0.65, 0);
+    mesh(new THREE.BoxGeometry(0.3, 0.17, 0.33), skinMat, rightArm, 0, -0.84, 0);
 
     const cupGroup = new THREE.Group();
     cupGroup.position.set(0, -0.86, -0.04);
@@ -176,14 +228,22 @@ export function buildAvatars(scene) {
     const leftLeg = new THREE.Group();
     leftLeg.position.set(-0.22, 0.8, 0);
     pose.add(leftLeg);
-    mesh(new THREE.BoxGeometry(0.36, 0.7, 0.4), pantsMat, leftLeg, 0, -0.35, 0);
-    mesh(new THREE.BoxGeometry(0.38, 0.18, 0.52), pantsMat, leftLeg, 0, -0.71, -0.055);
+    mesh(new THREE.BoxGeometry(0.36, 0.58, 0.4), pantsMat, leftLeg, 0, -0.3, 0);
+    mesh(new THREE.BoxGeometry(0.36, 0.14, 0.4), detailMat, leftLeg, 0, -0.61, 0);
+    mesh(new THREE.BoxGeometry(0.09, 0.28, 0.025), detailMat, leftLeg, -0.13, -0.32, -0.214);
+    mesh(new THREE.BoxGeometry(0.39, 0.18, 0.54), shoeMat, leftLeg, 0, -0.68, -0.06);
+    mesh(new THREE.BoxGeometry(0.4, 0.04, 0.55), soleMat, leftLeg, 0, -0.77, -0.06);
 
     const rightLeg = new THREE.Group();
     rightLeg.position.set(0.22, 0.8, 0);
     pose.add(rightLeg);
-    mesh(new THREE.BoxGeometry(0.36, 0.7, 0.4), pantsMat, rightLeg, 0, -0.35, 0);
-    mesh(new THREE.BoxGeometry(0.38, 0.18, 0.52), pantsMat, rightLeg, 0, -0.71, -0.055);
+    mesh(new THREE.BoxGeometry(0.36, 0.58, 0.4), pantsMat, rightLeg, 0, -0.3, 0);
+    mesh(new THREE.BoxGeometry(0.36, 0.14, 0.4), detailMat, rightLeg, 0, -0.61, 0);
+    mesh(new THREE.BoxGeometry(0.09, 0.28, 0.025), detailMat, rightLeg, 0.13, -0.32, -0.214);
+    mesh(new THREE.BoxGeometry(0.39, 0.18, 0.54), shoeMat, rightLeg, 0, -0.68, -0.06);
+    mesh(new THREE.BoxGeometry(0.4, 0.04, 0.55), soleMat, rightLeg, 0, -0.77, -0.06);
+
+    mesh(new THREE.BoxGeometry(0.28, 0.08, 0.05), detailMat, pose, 0, 0.79, -0.23);
 
     const shadow = new THREE.Mesh(
       new THREE.CircleGeometry(0.38, 24),

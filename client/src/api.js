@@ -37,7 +37,7 @@ export async function getIceConfig() {
   if (!res.ok) {
     return {
       iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }],
-      maxBitrate: 1500000,
+      maxBitrate: 4000000,
     };
   }
   return res.json();
