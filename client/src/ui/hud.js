@@ -19,8 +19,8 @@ export function renderHud({
   initialVolume = 0.8,
   initialStreamActive = false,
   initialScreenFocused = false,
-  initialSpatialAudioEnabled = false,
-  initialSpatialAudioMotion = 0.72,
+  initialSpatialAudioEnabled = true,
+  initialSpatialAudioMotion = 0.32,
   isHost = false,
 }) {
   const hudRoot = document.createElement('div');
@@ -207,21 +207,21 @@ export function renderHud({
   const spatialAudioBtn = document.createElement('button');
   spatialAudioBtn.type = 'button';
   spatialAudioBtn.className = 'glass hud-quick-btn';
-  spatialAudioBtn.hidden = isHost;
-  spatialAudioBtn.disabled = isHost || !initialStreamActive;
+  spatialAudioBtn.hidden = false;
+  spatialAudioBtn.disabled = !initialStreamActive;
   let spatialAudioEnabled = Boolean(initialSpatialAudioEnabled);
   function updateSpatialAudioButton(enabled) {
     spatialAudioEnabled = Boolean(enabled);
-    spatialAudioBtn.textContent = spatialAudioEnabled ? '8D sound on' : '8D sound';
+    spatialAudioBtn.textContent = spatialAudioEnabled ? 'Cinema surround: On' : 'Cinema surround';
     spatialAudioBtn.title = spatialAudioEnabled
-      ? 'Turn off the local stereo orbit'
-      : 'Turn on a local stereo orbit (headphones recommended)';
+      ? 'Turn off the local cinema ambience'
+      : 'Turn on the local cinema ambience';
     spatialAudioBtn.setAttribute('aria-pressed', String(spatialAudioEnabled));
-    spatialMotionControl.hidden = !spatialAudioEnabled;
+    spatialMotionControl.hidden = isHost || !spatialAudioEnabled;
   }
   const spatialMotionControl = document.createElement('label');
   spatialMotionControl.className = 'glass hud-spatial-motion';
-  spatialMotionControl.hidden = !spatialAudioEnabled;
+  spatialMotionControl.hidden = isHost || !spatialAudioEnabled;
   const spatialMotionLabel = document.createElement('span');
   spatialMotionLabel.textContent = 'Motion';
   const spatialMotionSlider = document.createElement('input');
@@ -241,7 +241,7 @@ export function renderHud({
     try {
       updateSpatialAudioButton(await onSetSpatialAudioEnabled(enabled));
     } finally {
-      spatialAudioBtn.disabled = isHost || !store.streaming.active;
+      spatialAudioBtn.disabled = !store.streaming.active;
     }
   }
   spatialAudioBtn.addEventListener('click', () => setSpatialAudio(!spatialAudioEnabled));
@@ -407,12 +407,9 @@ export function renderHud({
 
   const offStreaming = store.on('streaming', ({ active }) => {
     screenFocusBtn.disabled = !active;
-    spatialAudioBtn.disabled = isHost || !active;
+    spatialAudioBtn.disabled = !active;
     if (!active && screenFocused) {
       setScreenFocus(false);
-    }
-    if (!active && spatialAudioEnabled) {
-      setSpatialAudio(false);
     }
   });
 

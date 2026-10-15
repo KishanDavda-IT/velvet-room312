@@ -6,6 +6,27 @@ import { STATUS_TEXT } from '../constants.js';
 import { showToast } from '../ui/toast.js';
 
 const STREAM_CONNECT_TIMEOUT_MS = 15000;
+const CINEMA_EARLY_REFLECTIONS = [
+  { delay: 0.024, gain: 0.055 },
+  { delay: 0.043, gain: 0.03 },
+];
+
+function createCinemaImpulse(context) {
+  const duration = 0.58;
+  const length = Math.max(1, Math.floor(context.sampleRate * duration));
+  const impulse = context.createBuffer(2, length, context.sampleRate);
+
+  for (let channel = 0; channel < impulse.numberOfChannels; channel += 1) {
+    const samples = impulse.getChannelData(channel);
+    const channelLevel = channel === 0 ? 1 : 0.82;
+    for (let i = 0; i < length; i += 1) {
+      const decay = Math.pow(1 - i / length, 3.1);
+      samples[i] = (Math.random() * 2 - 1) * decay * 0.12 * channelLevel;
+    }
+  }
+
+  return impulse;
+}
 
 export class ViewerReceiver {
   constructor({ onRemoteVideoChange, getVolume } = {}) {
@@ -19,14 +40,18 @@ export class ViewerReceiver {
     this.tapOverlayEl = null;
     this.onRemoteVideoChange = onRemoteVideoChange || (() => {});
     this.getVolume = getVolume || (() => 0.8);
-    this.spatialAudioEnabled = false;
-    this.spatialAudioMotion = 0.72;
+    this.spatialAudioEnabled = true;
+    this.spatialAudioMotion = 0.32;
     this.audioContext = null;
     this.audioSource = null;
     this.audioPan = null;
     this.audioGain = null;
     this.audioStream = null;
     this.spatialMotionTimer = null;
+    this.audioRoomNodes = [];
+    this.resumeSpatialAudio = this.resumeSpatialAudio.bind(this);
+    document.addEventListener('pointerdown', this.resumeSpatialAudio, true);
+    document.addEventListener('keydown', this.resumeSpatialAudio, true);
 
     this._video = document.createElement('video');
     this._video.style.cssText = 'position:fixed;left:-9999px;width:2px;height:2px;pointer-events:none;';
@@ -39,6 +64,12 @@ export class ViewerReceiver {
 
   get video() {
     return this._video;
+  }
+
+  resumeSpatialAudio() {
+    if (this.audioContext?.state === 'suspended') {
+      this.audioContext.resume().catch(() => {});
+    }
   }
 
   setVolume(vol) {
@@ -103,15 +134,42 @@ export class ViewerReceiver {
     const audioOnlyStream = new MediaStream(audioTracks);
     const source = this.audioContext.createMediaStreamSource(audioOnlyStream);
     const panner = this.audioContext.createStereoPanner();
+    const directGain = this.audioContext.createGain();
+    directGain.gain.value = 0.86;
     const gain = this.audioContext.createGain();
     gain.gain.value = this.getVolume();
+
     source.connect(panner);
-    panner.connect(gain);
+    panner.connect(directGain);
+    directGain.connect(gain);
+
+    const convolver = this.audioContext.createConvolver();
+    convolver.normalize = false;
+    convolver.buffer = createCinemaImpulse(this.audioContext);
+    const roomGain = this.audioContext.createGain();
+    roomGain.gain.value = 0.16;
+    source.connect(convolver);
+    convolver.connect(roomGain);
+    roomGain.connect(gain);
+
+    const roomNodes = [directGain, convolver, roomGain];
+    for (const reflection of CINEMA_EARLY_REFLECTIONS) {
+      const delay = this.audioContext.createDelay(0.08);
+      delay.delayTime.value = reflection.delay;
+      const reflectionGain = this.audioContext.createGain();
+      reflectionGain.gain.value = reflection.gain;
+      source.connect(delay);
+      delay.connect(reflectionGain);
+      reflectionGain.connect(gain);
+      roomNodes.push(delay, reflectionGain);
+    }
+
     gain.connect(this.audioContext.destination);
 
     this.audioSource = source;
     this.audioPan = panner;
     this.audioGain = gain;
+    this.audioRoomNodes = roomNodes;
     this.audioStream = stream;
     this._video.muted = true;
     this._startSpatialMotion();
@@ -133,7 +191,7 @@ export class ViewerReceiver {
       clearInterval(this.spatialMotionTimer);
       this.spatialMotionTimer = null;
     }
-    for (const node of [this.audioSource, this.audioPan, this.audioGain]) {
+    for (const node of [this.audioSource, this.audioPan, this.audioGain, ...this.audioRoomNodes]) {
       try {
         node?.disconnect();
       } catch {
@@ -143,6 +201,7 @@ export class ViewerReceiver {
     this.audioSource = null;
     this.audioPan = null;
     this.audioGain = null;
+    this.audioRoomNodes = [];
     this.audioStream = null;
   }
 
@@ -214,6 +273,7 @@ export class ViewerReceiver {
     btn.className = 'tap-to-play-overlay';
     btn.innerHTML = `<span class="btn-gold">Tap to start the movie</span>`;
     btn.addEventListener('click', () => {
+      this.resumeSpatialAudio();
       this._video.muted = this.spatialAudioEnabled;
       this._video.volume = this.getVolume();
       this._video.play().catch(() => {});
@@ -379,6 +439,8 @@ export class ViewerReceiver {
     if (this.audioContext && this.audioContext.state !== 'closed') {
       this.audioContext.close().catch(() => {});
     }
+    document.removeEventListener('pointerdown', this.resumeSpatialAudio, true);
+    document.removeEventListener('keydown', this.resumeSpatialAudio, true);
     this.audioContext = null;
   }
 }
