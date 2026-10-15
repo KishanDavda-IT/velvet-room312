@@ -26,6 +26,7 @@ export function buildScreen({ scene, screenLight }) {
   let currentStatus = STATUS_TEXT.WAITING;
   let activeVideo = null;
   let liveTexture = null;
+  let screenFocused = false;
 
   function drawIdleCanvas() {
     if (!idleCtx) return;
@@ -99,6 +100,7 @@ export function buildScreen({ scene, screenLight }) {
     if (activeVideo === videoEl) return;
 
     if (activeVideo) {
+      activeVideo.classList.remove('cinema-screen-focused');
       activeVideo.removeEventListener('loadedmetadata', updateAspectFit);
       activeVideo.removeEventListener('resize', updateAspectFit);
     }
@@ -109,6 +111,7 @@ export function buildScreen({ scene, screenLight }) {
     activeVideo = videoEl || null;
 
     if (activeVideo) {
+      activeVideo.classList.toggle('cinema-screen-focused', screenFocused);
       liveTexture = new THREE.VideoTexture(activeVideo);
       liveTexture.colorSpace = THREE.SRGBColorSpace;
       liveTexture.minFilter = THREE.LinearFilter;
@@ -122,6 +125,7 @@ export function buildScreen({ scene, screenLight }) {
       material.map = liveTexture;
       material.needsUpdate = true;
     } else {
+      screenFocused = false;
       mesh.scale.set(1, 1, 1);
       material.map = idleTexture;
       material.needsUpdate = true;
@@ -146,6 +150,14 @@ export function buildScreen({ scene, screenLight }) {
     mesh,
     setSource,
     setStatus,
+    setScreenFocused(focused) {
+      screenFocused = Boolean(focused && activeVideo);
+      activeVideo?.classList.toggle('cinema-screen-focused', screenFocused);
+      return screenFocused;
+    },
+    isScreenFocused() {
+      return screenFocused;
+    },
     update,
     dispose() {
       setSource(null);

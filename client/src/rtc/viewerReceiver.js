@@ -19,6 +19,14 @@ export class ViewerReceiver {
     this.tapOverlayEl = null;
     this.onRemoteVideoChange = onRemoteVideoChange || (() => {});
     this.getVolume = getVolume || (() => 0.8);
+    this.spatialAudioEnabled = false;
+    this.spatialAudioMotion = 0.72;
+    this.audioContext = null;
+    this.audioSource = null;
+    this.audioPan = null;
+    this.audioGain = null;
+    this.audioStream = null;
+    this.spatialMotionTimer = null;
 
     this._video = document.createElement('video');
     this._video.style.cssText = 'position:fixed;left:-9999px;width:2px;height:2px;pointer-events:none;';
@@ -34,9 +42,108 @@ export class ViewerReceiver {
   }
 
   setVolume(vol) {
-    if (this._video) {
-      this._video.volume = Math.min(Math.max(vol, 0), 1);
+    const volume = Math.min(Math.max(vol, 0), 1);
+    if (this.audioGain && this.audioContext) {
+      this.audioGain.gain.setTargetAtTime(volume, this.audioContext.currentTime, 0.03);
     }
+    if (this._video) {
+      this._video.volume = volume;
+    }
+  }
+
+  setSpatialAudioMotion(value) {
+    this.spatialAudioMotion = Math.min(Math.max(Number(value) || 0, 0), 1);
+  }
+
+  async setSpatialAudioEnabled(enabled) {
+    if (!enabled) {
+      this.spatialAudioEnabled = false;
+      this._disconnectSpatialAudio();
+      if (this._video) {
+        this._video.muted = false;
+        this._video.volume = this.getVolume();
+      }
+      return false;
+    }
+
+    this.spatialAudioEnabled = true;
+    try {
+      const connected = await this._connectSpatialAudio();
+      if (!connected) {
+        this.spatialAudioEnabled = false;
+        showToast('Start a stream with audio before enabling 8D sound.');
+      }
+      return connected;
+    } catch {
+      this.spatialAudioEnabled = false;
+      this._disconnectSpatialAudio();
+      if (this._video) this._video.muted = false;
+      showToast('This browser could not start spatial audio.');
+      return false;
+    }
+  }
+
+  async _connectSpatialAudio() {
+    const stream = this._video?.srcObject;
+    const audioTracks = stream?.getAudioTracks?.().filter((track) => track.readyState === 'live') || [];
+    if (!audioTracks.length) return false;
+
+    if (this.audioSource && this.audioStream === stream) {
+      if (this.audioContext?.state === 'suspended') await this.audioContext.resume();
+      return true;
+    }
+
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor || typeof MediaStream === 'undefined') return false;
+
+    this._disconnectSpatialAudio();
+    this.audioContext = this.audioContext || new AudioContextCtor();
+    if (this.audioContext.state !== 'running') await this.audioContext.resume();
+
+    const audioOnlyStream = new MediaStream(audioTracks);
+    const source = this.audioContext.createMediaStreamSource(audioOnlyStream);
+    const panner = this.audioContext.createStereoPanner();
+    const gain = this.audioContext.createGain();
+    gain.gain.value = this.getVolume();
+    source.connect(panner);
+    panner.connect(gain);
+    gain.connect(this.audioContext.destination);
+
+    this.audioSource = source;
+    this.audioPan = panner;
+    this.audioGain = gain;
+    this.audioStream = stream;
+    this._video.muted = true;
+    this._startSpatialMotion();
+    return true;
+  }
+
+  _startSpatialMotion() {
+    if (this.spatialMotionTimer) clearInterval(this.spatialMotionTimer);
+    this.spatialMotionTimer = setInterval(() => {
+      if (!this.spatialAudioEnabled || !this.audioPan || !this.audioContext || this.audioContext.state !== 'running') return;
+      const phase = (Date.now() / 1000) * (Math.PI * 2 / 10);
+      const pan = Math.sin(phase) * this.spatialAudioMotion;
+      this.audioPan.pan.setTargetAtTime(pan, this.audioContext.currentTime, 0.08);
+    }, 50);
+  }
+
+  _disconnectSpatialAudio() {
+    if (this.spatialMotionTimer) {
+      clearInterval(this.spatialMotionTimer);
+      this.spatialMotionTimer = null;
+    }
+    for (const node of [this.audioSource, this.audioPan, this.audioGain]) {
+      try {
+        node?.disconnect();
+      } catch {
+        // Ignore already-disconnected audio nodes.
+      }
+    }
+    this.audioSource = null;
+    this.audioPan = null;
+    this.audioGain = null;
+    this.audioStream = null;
   }
 
   scheduleResync(delay = 1800) {
@@ -107,7 +214,7 @@ export class ViewerReceiver {
     btn.className = 'tap-to-play-overlay';
     btn.innerHTML = `<span class="btn-gold">Tap to start the movie</span>`;
     btn.addEventListener('click', () => {
-      this._video.muted = false;
+      this._video.muted = this.spatialAudioEnabled;
       this._video.volume = this.getVolume();
       this._video.play().catch(() => {});
       this.hideTapToPlayOverlay();
@@ -170,6 +277,9 @@ export class ViewerReceiver {
         this._video.srcObject = remoteStream;
       }
       this._video.volume = this.getVolume();
+      if (this.spatialAudioEnabled) {
+        this._connectSpatialAudio().catch(() => {});
+      }
       if (e.track.kind === 'video') {
         this._awaitFirstFrameAndSetLive();
       }
@@ -246,8 +356,10 @@ export class ViewerReceiver {
       this.pc = null;
     }
 
+    this._disconnectSpatialAudio();
     if (this._video) {
       try {
+        this._video.muted = false;
         this._video.pause();
         this._video.srcObject = null;
       } catch {
@@ -264,5 +376,9 @@ export class ViewerReceiver {
       this._video.remove();
       this._video = null;
     }
+    if (this.audioContext && this.audioContext.state !== 'closed') {
+      this.audioContext.close().catch(() => {});
+    }
+    this.audioContext = null;
   }
 }

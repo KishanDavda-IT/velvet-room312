@@ -11,9 +11,17 @@ export function renderHud({
   onToggleFirstPerson = () => false,
   onDrink = () => {},
   onToggleFullscreen = () => {},
+  onToggleScreenFocus = () => false,
+  onSetSpatialAudioEnabled = () => false,
+  onSetSpatialAudioMotion = () => {},
   initialLightsEnabled = true,
   initialFirstPerson = false,
   initialVolume = 0.8,
+  initialStreamActive = false,
+  initialScreenFocused = false,
+  initialSpatialAudioEnabled = false,
+  initialSpatialAudioMotion = 0.72,
+  isHost = false,
 }) {
   const hudRoot = document.createElement('div');
   hudRoot.className = 'hud-layer';
@@ -167,14 +175,76 @@ export function renderHud({
 
   function updateFullscreenButton() {
     const isFullscreen = Boolean(document.fullscreenElement);
-    fullscreenBtn.textContent = isFullscreen ? 'Exit fullscreen' : 'Fullscreen';
-    fullscreenBtn.title = isFullscreen ? 'Exit fullscreen (F)' : 'Enter fullscreen (F)';
+    fullscreenBtn.textContent = isFullscreen ? 'Exit app fullscreen' : 'App fullscreen';
+    fullscreenBtn.title = isFullscreen ? 'Exit browser fullscreen (F)' : 'Enter browser fullscreen (F)';
     fullscreenBtn.setAttribute('aria-pressed', String(isFullscreen));
   }
 
   updateFullscreenButton();
   fullscreenBtn.addEventListener('click', onToggleFullscreen);
   document.addEventListener('fullscreenchange', updateFullscreenButton);
+
+
+  const screenFocusBtn = document.createElement('button');
+  screenFocusBtn.type = 'button';
+  screenFocusBtn.className = 'glass hud-quick-btn';
+  screenFocusBtn.disabled = !initialStreamActive;
+  let screenFocused = Boolean(initialScreenFocused);
+  function updateScreenFocusButton(enabled) {
+    screenFocused = Boolean(enabled);
+    screenFocusBtn.textContent = screenFocused ? 'Back to room' : 'Full screen movie';
+    screenFocusBtn.title = screenFocused ? 'Return to the 3D cinema room' : 'Expand the movie to fill the browser window (Esc to return)';
+    screenFocusBtn.setAttribute('aria-pressed', String(screenFocused));
+  }
+  function setScreenFocus(enabled) {
+    const focused = onToggleScreenFocus(enabled);
+    updateScreenFocusButton(focused);
+    return focused;
+  }
+  updateScreenFocusButton(screenFocused);
+  screenFocusBtn.addEventListener('click', () => setScreenFocus(!screenFocused));
+
+  const spatialAudioBtn = document.createElement('button');
+  spatialAudioBtn.type = 'button';
+  spatialAudioBtn.className = 'glass hud-quick-btn';
+  spatialAudioBtn.hidden = isHost;
+  spatialAudioBtn.disabled = isHost || !initialStreamActive;
+  let spatialAudioEnabled = Boolean(initialSpatialAudioEnabled);
+  function updateSpatialAudioButton(enabled) {
+    spatialAudioEnabled = Boolean(enabled);
+    spatialAudioBtn.textContent = spatialAudioEnabled ? '8D sound on' : '8D sound';
+    spatialAudioBtn.title = spatialAudioEnabled
+      ? 'Turn off the local stereo orbit'
+      : 'Turn on a local stereo orbit (headphones recommended)';
+    spatialAudioBtn.setAttribute('aria-pressed', String(spatialAudioEnabled));
+    spatialMotionControl.hidden = !spatialAudioEnabled;
+  }
+  const spatialMotionControl = document.createElement('label');
+  spatialMotionControl.className = 'glass hud-spatial-motion';
+  spatialMotionControl.hidden = !spatialAudioEnabled;
+  const spatialMotionLabel = document.createElement('span');
+  spatialMotionLabel.textContent = 'Motion';
+  const spatialMotionSlider = document.createElement('input');
+  spatialMotionSlider.type = 'range';
+  spatialMotionSlider.min = '0';
+  spatialMotionSlider.max = '1';
+  spatialMotionSlider.step = '0.05';
+  spatialMotionSlider.value = String(initialSpatialAudioMotion);
+  spatialMotionSlider.setAttribute('aria-label', '8D sound motion strength');
+  spatialMotionSlider.addEventListener('input', () => {
+    onSetSpatialAudioMotion(Number(spatialMotionSlider.value));
+  });
+  spatialMotionControl.append(spatialMotionLabel, spatialMotionSlider);
+  updateSpatialAudioButton(spatialAudioEnabled);
+  async function setSpatialAudio(enabled) {
+    spatialAudioBtn.disabled = true;
+    try {
+      updateSpatialAudioButton(await onSetSpatialAudioEnabled(enabled));
+    } finally {
+      spatialAudioBtn.disabled = isHost || !store.streaming.active;
+    }
+  }
+  spatialAudioBtn.addEventListener('click', () => setSpatialAudio(!spatialAudioEnabled));
 
   const companionBtn = document.createElement('button');
   companionBtn.type = 'button';
@@ -224,7 +294,7 @@ export function renderHud({
   }
   drinkBtn.addEventListener('click', haveDrink);
 
-  quickControls.append(lightsBtn, fullscreenBtn, companionBtn, firstPersonBtn, drinkBtn);
+  quickControls.append(lightsBtn, fullscreenBtn, screenFocusBtn, spatialAudioBtn, spatialMotionControl, companionBtn, firstPersonBtn, drinkBtn);
 
   function updateStatusPill(statusText) {
     statusPill.innerHTML = '';
@@ -335,6 +405,17 @@ export function renderHud({
     updateStatusPill(statusText);
   });
 
+  const offStreaming = store.on('streaming', ({ active }) => {
+    screenFocusBtn.disabled = !active;
+    spatialAudioBtn.disabled = isHost || !active;
+    if (!active && screenFocused) {
+      setScreenFocus(false);
+    }
+    if (!active && spatialAudioEnabled) {
+      setSpatialAudio(false);
+    }
+  });
+
   let theaterHidden = false;
   function setTheaterMode(hidden) {
     theaterHidden = Boolean(hidden);
@@ -358,6 +439,10 @@ export function renderHud({
       return theaterHidden;
     },
     setTheaterMode,
+    isScreenFocused() {
+      return screenFocused;
+    },
+    setScreenFocus,
     toggleFirstPerson,
     toggleTheaterMode() {
       setTheaterMode(!theaterHidden);
@@ -365,6 +450,7 @@ export function renderHud({
     destroy() {
       offPeers();
       offStatus();
+      offStreaming();
       document.removeEventListener('fullscreenchange', updateFullscreenButton);
       document.removeEventListener('keydown', onInviteKeydown);
       hudRoot.remove();

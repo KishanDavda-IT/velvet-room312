@@ -312,6 +312,11 @@ async function enterRoom({ roomId, name, hostKey }) {
     initialVolume: currentVolume,
     initialLightsEnabled: sceneCtx.areRoomLightsEnabled(),
     initialFirstPerson: cameraRig.isFirstPerson(),
+    initialStreamActive: store.streaming.active,
+    initialScreenFocused: screenBuilder.isScreenFocused(),
+    initialSpatialAudioEnabled: viewerReceiver?.spatialAudioEnabled || false,
+    initialSpatialAudioMotion: viewerReceiver?.spatialAudioMotion ?? 0.72,
+    isHost: store.isHost,
     onToggleLights() {
       return sceneCtx.toggleRoomLights();
     },
@@ -326,6 +331,17 @@ async function enterRoom({ roomId, name, hostKey }) {
       } else {
         document.exitFullscreen?.().catch(() => {});
       }
+    },
+    onToggleScreenFocus(focused) {
+      const active = screenBuilder.setScreenFocused(focused);
+      if (focused && !active) showToast('The movie is still connecting.');
+      return active;
+    },
+    onSetSpatialAudioEnabled(enabled) {
+      return viewerReceiver?.setSpatialAudioEnabled(enabled) ?? false;
+    },
+    onSetSpatialAudioMotion(motion) {
+      viewerReceiver?.setSpatialAudioMotion(motion);
     },
     onSendReaction(emoji) {
       net.emit('reaction:send', { emoji });
@@ -625,6 +641,10 @@ async function enterRoom({ roomId, name, hostKey }) {
     if (e.key === 'Escape') {
       if (chat.isInputFocused()) {
         chat.blurInput();
+        return;
+      }
+      if (hud.isScreenFocused()) {
+        hud.setScreenFocus(false);
         return;
       }
       if (hud.isTheaterMode()) {
