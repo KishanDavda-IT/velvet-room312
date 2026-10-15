@@ -207,8 +207,8 @@ export function renderHud({
   const spatialAudioBtn = document.createElement('button');
   spatialAudioBtn.type = 'button';
   spatialAudioBtn.className = 'glass hud-quick-btn';
-  spatialAudioBtn.hidden = isHost;
-  spatialAudioBtn.disabled = isHost || !initialStreamActive;
+  spatialAudioBtn.hidden = false;
+  spatialAudioBtn.disabled = !initialStreamActive;
   let spatialAudioEnabled = Boolean(initialSpatialAudioEnabled);
   function updateSpatialAudioButton(enabled) {
     spatialAudioEnabled = Boolean(enabled);
@@ -217,11 +217,11 @@ export function renderHud({
       ? 'Turn off the local cinema ambience'
       : 'Turn on the local cinema ambience';
     spatialAudioBtn.setAttribute('aria-pressed', String(spatialAudioEnabled));
-    spatialMotionControl.hidden = !spatialAudioEnabled;
+    spatialMotionControl.hidden = isHost || !spatialAudioEnabled;
   }
   const spatialMotionControl = document.createElement('label');
   spatialMotionControl.className = 'glass hud-spatial-motion';
-  spatialMotionControl.hidden = !spatialAudioEnabled;
+  spatialMotionControl.hidden = isHost || !spatialAudioEnabled;
   const spatialMotionLabel = document.createElement('span');
   spatialMotionLabel.textContent = 'Motion';
   const spatialMotionSlider = document.createElement('input');
@@ -241,7 +241,7 @@ export function renderHud({
     try {
       updateSpatialAudioButton(await onSetSpatialAudioEnabled(enabled));
     } finally {
-      spatialAudioBtn.disabled = isHost || !store.streaming.active;
+      spatialAudioBtn.disabled = !store.streaming.active;
     }
   }
   spatialAudioBtn.addEventListener('click', () => setSpatialAudio(!spatialAudioEnabled));
@@ -407,7 +407,7 @@ export function renderHud({
 
   const offStreaming = store.on('streaming', ({ active }) => {
     screenFocusBtn.disabled = !active;
-    spatialAudioBtn.disabled = isHost || !active;
+    spatialAudioBtn.disabled = !active;
     if (!active && screenFocused) {
       setScreenFocus(false);
     }
