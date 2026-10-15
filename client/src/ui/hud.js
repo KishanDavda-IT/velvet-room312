@@ -19,8 +19,8 @@ export function renderHud({
   initialVolume = 0.8,
   initialStreamActive = false,
   initialScreenFocused = false,
-  initialSpatialAudioEnabled = false,
-  initialSpatialAudioMotion = 0.72,
+  initialSpatialAudioEnabled = true;
+  initialSpatialAudioMotion = 0.32;
   isHost = false,
 }) {
   const hudRoot = document.createElement('div');
@@ -212,10 +212,10 @@ export function renderHud({
   let spatialAudioEnabled = Boolean(initialSpatialAudioEnabled);
   function updateSpatialAudioButton(enabled) {
     spatialAudioEnabled = Boolean(enabled);
-    spatialAudioBtn.textContent = spatialAudioEnabled ? '8D sound on' : '8D sound';
+    spatialAudioBtn.textContent = spatialAudioEnabled ? 'Cinema surround: On' : 'Cinema surround';
     spatialAudioBtn.title = spatialAudioEnabled
-      ? 'Turn off the local stereo orbit'
-      : 'Turn on a local stereo orbit (headphones recommended)';
+      ? 'Turn off the local cinema ambience'
+      : 'Turn on the local cinema ambience';
     spatialAudioBtn.setAttribute('aria-pressed', String(spatialAudioEnabled));
     spatialMotionControl.hidden = !spatialAudioEnabled;
   }
@@ -410,9 +410,6 @@ export function renderHud({
     spatialAudioBtn.disabled = isHost || !active;
     if (!active && screenFocused) {
       setScreenFocus(false);
-    }
-    if (!active && spatialAudioEnabled) {
-      setSpatialAudio(false);
     }
   });
 
