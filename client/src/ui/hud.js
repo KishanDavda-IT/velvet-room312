@@ -19,8 +19,8 @@ export function renderHud({
   initialVolume = 0.8,
   initialStreamActive = false,
   initialScreenFocused = false,
-  initialSpatialAudioEnabled = true;
-  initialSpatialAudioMotion = 0.32;
+  initialSpatialAudioEnabled = true,
+  initialSpatialAudioMotion = 0.32,
   isHost = false,
 }) {
   const hudRoot = document.createElement('div');
